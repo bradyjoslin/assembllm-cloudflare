@@ -33,7 +33,7 @@ struct Model {
     aliases: [&'static str; 1],
 }
 
-static MODELS: [Model; 10] = [
+static MODELS: [Model; 36] = [
     Model {
         name: "@cf/meta/llama-3-8b-instruct",
         aliases: ["llama-3-8b"],
@@ -67,12 +67,116 @@ static MODELS: [Model; 10] = [
         aliases: ["deepseek-math-7b-instruct"],
     },
     Model {
+        name: "@cf/thebloke/discolm-german-7b-v1-awq",
+        aliases: ["discolm-german-7b-v1-awq"],
+    },
+    Model {
         name: "@cf/tiiuae/falcon-7b-instruct",
         aliases: ["falcon-7b"],
     },
     Model {
         name: "@cf/google/gemma-2b-it-lora",
         aliases: ["gemma-2b"],
+    },
+    Model {
+        name: "@cf/google/gemma-7b-it",
+        aliases: ["gemma-7b"],
+    },
+    Model {
+        name: "@cf/google/gemma-7b-it-lora",
+        aliases: ["gemma-7b-lora"],
+    },
+    Model {
+        name: "@hf/nousresearch/hermes-2-pro-mistral-7b",
+        aliases: ["hermes-2-pro-mistral-7b"],
+    },
+    Model {
+        name: "@hf/thebloke/llama-2-13b-chat-awq",
+        aliases: ["llama-2-13b-chat-awq"],
+    },
+    Model {
+        name: "@hf/thebloke/llama-2-13b-chat-awq",
+        aliases: ["llama-2-13b-chat-awq"],
+    },
+    Model {
+        name: "@cf/meta-llama/llama-2-7b-chat-hf-lora",
+        aliases: ["llama-2-7b-chat-hf-lora"],
+    },
+    Model {
+        name: "@cf/meta/llama-3-8b-instruct",
+        aliases: ["llama-3-8b-instruct"],
+    },
+    Model {
+        name: "@cf/meta/llama-3-8b-instruct-awq",
+        aliases: ["llama-3-8b-instruct-awq"],
+    },
+    Model {
+        name: "@hf/thebloke/llamaguard-7b-awq",
+        aliases: ["llamaguard-7b-awq"],
+    },
+    Model {
+        name: "@hf/thebloke/mistral-7b-instruct-v0.1-awq",
+        aliases: ["mistral-7b-instruct-v0.1-awq"],
+    },
+    Model {
+        name: "@hf/mistral/mistral-7b-instruct-v0.2",
+        aliases: ["mistral-7b-instruct-v0.2"],
+    },
+    Model {
+        name: "@cf/mistral/mistral-7b-instruct-v0.2-lora",
+        aliases: ["mistral-7b-instruct-v0.2-lora"],
+    },
+    Model {
+        name: "@hf/thebloke/neural-chat-7b-v3-1-awq",
+        aliases: ["neural-chat-7b-v3-1-awq"],
+    },
+    Model {
+        name: "@cf/openchat/openchat-3.5-0106",
+        aliases: ["openchat-3.5-0106"],
+    },
+    Model {
+        name: "@hf/thebloke/openhermes-2.5-mistral-7b-awq",
+        aliases: ["openhermes-2.5-mistral-7b-awq"],
+    },
+    Model {
+        name: "@cf/microsoft/phi-2",
+        aliases: ["phi-2"],
+    },
+    Model {
+        name: "@cf/qwen/qwen1.5-0.5b-chat",
+        aliases: ["qwen1.5-0.5b-chat"],
+    },
+    Model {
+        name: "@cf/qwen/qwen1.5-1.8b-chat",
+        aliases: ["qwen1.5-1.8b-chat"],
+    },
+    Model {
+        name: "@cf/qwen/qwen1.5-14b-chat-awq",
+        aliases: ["qwen1.5-14b-chat-awq"],
+    },
+    Model {
+        name: "@cf/qwen/qwen1.5-7b-chat-awq",
+        aliases: ["qwen1.5-7b-chat-awq"],
+    },
+    Model {
+        name: "@cf/defog/sqlcoder-7b-2",
+        aliases: ["sqlcoder-7b-2"],
+    },
+    Model {
+        name: "@hf/nexusflow/starling-lm-7b-beta",
+        aliases: ["starling-lm-7b-beta"],
+    },
+    Model {
+        name: "@cf/tinyllama/tinyllama-1.1b-chat-v1.0",
+        aliases: ["tinyllama-1.1b-chat-v1.0"],
+    },
+    Model {
+        name: "@cf/fblgit/una-cybertron-7b-v2-bf16",
+        aliases: ["una-cybertron-7b-v2-bf16"],
+    },
+    Model {
+        name: "@hf/thebloke/zephyr-7b-beta-awq",
+        aliases: ["zephyr-7b-beta-awq"],
     },
 ];
 
@@ -242,7 +346,8 @@ pub fn completion(input: String) -> FnResult<String> {
 
 #[plugin_fn]
 pub fn models() -> FnResult<String> {
-    let models_json = serde_json::to_string(&MODELS)?;
+    let models_vec: Vec<Model> = MODELS.to_vec();
+    let models_json = serde_json::to_string(&models_vec)?;
     info!("Returning models");
     Ok(models_json)
 }
