@@ -45,7 +45,7 @@ struct ChatResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ToolCall {
-    arguments: Option<HashMap<String, String>>,
+    arguments: Option<HashMap<String, serde_json::Value>>,
     name: String,
 }
 
