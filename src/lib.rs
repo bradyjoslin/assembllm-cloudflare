@@ -466,11 +466,10 @@ pub fn completionWithTools(input: CompletionToolInput) -> FnResult<String> {
 
     info!("Response: {:?}", res);
 
-    let tool_calls = res
-        .result
-        .tool_calls
-        .as_ref()
-        .ok_or(anyhow::anyhow!("response: {:?}", res))?;
+    let tool_calls = match res.result.tool_calls.as_ref() {
+        Some(tool_calls) => tool_calls,
+        None => return Ok("[{\"input\": { }, \"name\": \"\"}]".into()),
+    };
 
     let formatted_tool_calls: Vec<Value> = tool_calls
         .iter()
