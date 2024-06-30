@@ -1,21 +1,52 @@
 use extism_pdk::*;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::str::from_utf8;
+use serde_json::{json, Value};
+use std::{collections::HashMap, str::from_utf8};
 
-#[derive(Debug, Deserialize)]
-struct ChatMessage {
-    content: String,
+#[derive(Serialize)]
+struct ToolFunction {
+    name: String,
+    description: String,
+    parameters: FunctionParameters,
 }
 
-#[derive(Debug, Deserialize)]
-struct ChatChoice {
-    message: ChatMessage,
+#[derive(Serialize)]
+struct FunctionParameters {
+    #[serde(rename = "type")]
+    param_type: String,
+    properties: HashMap<String, serde_json::Value>,
+    required: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ToolResult {
+    id: String,
+    #[serde(rename = "type")]
+    type_: String,
+    function: ToolFunctionResult,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ToolFunctionResult {
+    name: String,
+    arguments: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ChatResult {
-    choices: Vec<ChatChoice>,
+    result: ChatResponse,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ChatResponse {
+    response: Option<String>,
+    tool_calls: Option<Vec<ToolCall>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ToolCall {
+    arguments: Option<HashMap<String, serde_json::Value>>,
+    name: String,
 }
 
 #[derive(Debug)]
@@ -31,6 +62,43 @@ struct CloudflareAIConfig {
 struct Model {
     name: &'static str,
     aliases: [&'static str; 1],
+}
+
+#[derive(Serialize, Deserialize, FromBytes)]
+#[encoding(Json)]
+pub struct CompletionToolInput {
+    pub tools: Vec<Tool>,
+    pub messages: Vec<Message>,
+}
+
+#[derive(Serialize, Deserialize, FromBytes)]
+#[encoding(Json)]
+pub struct Message {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Serialize, Deserialize, FromBytes)]
+#[encoding(Json)]
+pub struct Tool {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub input_schema: InputSchema,
+    #[serde(default = "default_type")]
+    pub r#type: String,
+}
+
+fn default_type() -> String {
+    "function".to_string()
+}
+
+#[derive(Serialize, Deserialize, FromBytes)]
+#[encoding(Json)]
+pub struct InputSchema {
+    #[serde(rename = "type")]
+    pub data_type: String,
+    pub properties: HashMap<String, serde_json::Value>,
+    pub required: Vec<String>,
 }
 
 static MODELS: [Model; 36] = [
@@ -183,40 +251,64 @@ static MODELS: [Model; 36] = [
 fn get_completion(
     api_key: String,
     model: &Model,
-    input: String,
+    prompt: String,
     temperature: f32,
     role: String,
     account_id: String,
+    tools: Option<Vec<Tool>>,
 ) -> Result<ChatResult, anyhow::Error> {
-    let req = HttpRequest::new(format!("https://api.cloudflare.com/client/v4/accounts/{}/ai/v1/chat/completions", account_id))
-        .with_header("Authorization", format!("Bearer {}", api_key))
-        .with_header("Content-Type", "application/json")
-        .with_method("POST");
+    let req = HttpRequest::new(format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/ai/run/{}",
+        account_id, model.name
+    ))
+    .with_header("Authorization", format!("Bearer {}", api_key))
+    .with_header("Content-Type", "application/json")
+    .with_method("POST");
 
-    // We could make our own structs for the body
-    // this is a quick way to make some unstructured JSON
-    let req_body = json!({
-      "model": model.name,
-      "temperature": temperature,
-      "messages": [
-        {
-            "role": "system",
-            "content": role,
-          },
-        {
-          "role": "user",
-          "content": input,
+    let mut wrapped_tools: Vec<ToolFunction> = Vec::new();
+    match tools {
+        Some(tools) => {
+            info!("Tools found");
+            wrapped_tools = tools
+                .into_iter()
+                .map(|tool| ToolFunction {
+                    name: tool.name.unwrap_or_default(),
+                    description: tool.description.unwrap_or_default(),
+                    parameters: FunctionParameters {
+                        param_type: tool.input_schema.data_type,
+                        properties: tool.input_schema.properties,
+                        required: tool.input_schema.required,
+                    },
+                })
+                .collect();
         }
-      ],
+        None => {
+            info!("No tools found");
+        }
+    }
+
+    let mut req_body = json!({
+        "temperature": temperature,
+        "messages": [
+            {
+                "role": "system",
+                "content": role,
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
     });
 
-    let res = match http::request::<String>(&req, Some(req_body.to_string())) {
-        Ok(response) => response,
-        Err(e) => {
-            error!("Failed to reach the URL: {}", e);
-            return Err(anyhow::anyhow!("Failed to reach the URL: {}", e));
-        }
-    };
+    if !wrapped_tools.is_empty() {
+        req_body["tools"] = json!(wrapped_tools);
+    }
+
+    info!("Request body: {}", req_body.to_string());
+
+    let res = http::request::<String>(&req, Some(req_body.to_string()))?;
+
     match res.status_code() {
         200 => {
             info!("Request successful");
@@ -225,7 +317,7 @@ fn get_completion(
             let response_body = res.body();
             let body = from_utf8(&response_body)?;
             return Err(anyhow::anyhow!(
-                "error calling API, check your Cloudflare API key and Account ID\nStatus Code: {}\n Response: {}",
+                "error calling API\nStatus Code: {}\n Response: {}",
                 res.status_code(),
                 body
             ));
@@ -233,10 +325,10 @@ fn get_completion(
     }
     let response_body = res.body();
     let body = from_utf8(&response_body)?;
+
     let chat_result: ChatResult = serde_json::from_str(body)?;
     Ok(chat_result)
 }
-
 fn get_config_values(
     cfg_get: impl Fn(&str) -> Result<Option<String>, anyhow::Error>,
 ) -> FnResult<CloudflareAIConfig> {
@@ -323,7 +415,10 @@ fn get_config_values(
         info!("Account ID: {}", account_id);
     } else {
         error!("Account ID not specified");
-        return Err(WithReturnCode::new(anyhow::anyhow!("Account ID not specified"), 1));
+        return Err(WithReturnCode::new(
+            anyhow::anyhow!("Account ID not specified"),
+            1,
+        ));
     }
 
     Ok(CloudflareAIConfig {
@@ -339,9 +434,58 @@ fn get_config_values(
 pub fn completion(input: String) -> FnResult<String> {
     let cfg = get_config_values(|key| config::get(key))?;
 
-    let res = get_completion(cfg.api_key, &cfg.model, input, cfg.temperature, cfg.role, cfg.account_id)?;
+    let res = get_completion(
+        cfg.api_key,
+        &cfg.model,
+        input,
+        cfg.temperature,
+        cfg.role,
+        cfg.account_id,
+        None,
+    )?;
 
-    Ok(res.choices[0].message.content.clone())
+    let output = res.result.response;
+
+    Ok(output.unwrap_or_default())
+}
+
+#[plugin_fn]
+pub fn completionWithTools(input: CompletionToolInput) -> FnResult<String> {
+    let cfg = get_config_values(|key| config::get(key))?;
+
+    let prompt = input.messages[0].content.clone();
+    let res = get_completion(
+        cfg.api_key,
+        &cfg.model,
+        prompt,
+        cfg.temperature,
+        cfg.role,
+        cfg.account_id,
+        Some(input.tools),
+    )?;
+
+    info!("Response: {:?}", res);
+
+    let tool_calls = match res.result.tool_calls.as_ref() {
+        Some(tool_calls) => tool_calls,
+        None => return Ok("[{\"input\": { }, \"name\": \"\"}]".into()),
+    };
+
+    let formatted_tool_calls: Vec<Value> = tool_calls
+        .iter()
+        .map(|tool_call| {
+            let mut tool_call_json = json!({
+                "name": tool_call.name,
+            });
+
+            let arguments_json = serde_json::to_value(&tool_call.arguments).unwrap();
+            tool_call_json["input"] = arguments_json;
+            tool_call_json
+        })
+        .collect();
+
+    let json_output = serde_json::to_string_pretty(&formatted_tool_calls)?;
+    Ok(json_output)
 }
 
 #[plugin_fn]
