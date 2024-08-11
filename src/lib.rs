@@ -103,16 +103,16 @@ pub struct InputSchema {
 
 static MODELS: [Model; 36] = [
     Model {
+        name: "@cf/meta/llama-3.1-8b-instruct",
+        aliases: ["llama-31-8b"],
+    },
+    Model {
         name: "@cf/meta/llama-3-8b-instruct",
         aliases: ["llama-3-8b"],
     },
     Model {
         name: "@cf/meta/llama-2-7b-chat-fp16",
         aliases: ["llama-2-7b"],
-    },
-    Model {
-        name: "@cf/meta/llama-2-7b-chat-int8",
-        aliases: ["llama-2-7b-int8"],
     },
     Model {
         name: "@cf/mistral/mistral-7b-instruct-v0.1",
